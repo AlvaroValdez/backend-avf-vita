@@ -13,6 +13,7 @@ router.get('/countries', countries.getCountries);
 router.get('/withdrawal-rules', rules.getWithdrawalRules);
 router.get('/wallets', wallets.listWallets);
 router.get('/transactions', tx.listTransactions);
+router.get('/ipn/events', ipnController.listEvents);
 
 // NUEVAS (creación real en Vita):
 router.post('/transactions/vita-sent', tx.createVitaSent);

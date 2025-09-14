@@ -45,6 +45,7 @@ const config = {
 };
 
 const app = express();
+app.set('trust proxy', 1)
 
 // ===== Middlewares =====
 app.use(helmet());
@@ -52,7 +53,7 @@ app.use(compression());
 app.use(express.json({ limit: '1mb' }));
 
 // CORS: lista blanca + función (admite curl/postman sin Origin)
-const allowedOrigins = [frontendOrigin, 'http://localhost:5173', 'http://127.0.0.1:5173']
+const allowedOrigins = [frontendOrigin, 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://127.0.0.1:5173']
   .filter(Boolean);
 
 app.use(cors({

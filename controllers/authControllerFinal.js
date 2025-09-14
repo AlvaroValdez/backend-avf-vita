@@ -64,10 +64,9 @@ const register = async (req, res) => {
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
-
         console.log('🔐 Intentando login:', email);
-
         const user = await User.findOne({ email });
+
         if (!user) {
             return res.status(401).json({
                 message: 'Credenciales inválidas',
@@ -82,8 +81,18 @@ const login = async (req, res) => {
                 code: 'INVALID_CREDENTIALS'
             });
         }
-
         const token = user.generateAuthToken();
+
+        const isProd = process.env.NODE_ENV === 'production';
+        if (req.body?.withCookie) {
+        res.cookie('sid', token, {
+            httpOnly: true,
+            secure: isProd,                 // en Render: true
+            sameSite: isProd ? 'none' : 'lax',
+            maxAge: 1000*60*60*8,
+        });
+        }
+
 
         res.json({
             message: 'Login exitoso',
