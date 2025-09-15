@@ -1,10 +1,12 @@
-const router = require('express').Router();
+const express = require('express');
+const router = express.Router();
 const prices = require('../controllers/pricesController');
 const countries = require('../controllers/countriesController');
 const rules = require('../controllers/rulesController');
 const wallets = require('../controllers/walletsController');
 const tx = require('../controllers/transactionsController');
 const vitaUsers = require('../controllers/vitaUsersController');
+const metaController = require('../controllers/metaController');
 
 
 router.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
@@ -19,5 +21,6 @@ router.get('/ipn/events', ipnController.listEvents);
 router.post('/transactions/vita-sent', tx.createVitaSent);
 router.post('/transactions/withdrawal', tx.createWithdrawal);
 router.get('/vita-users', vitaUsers.getByEmail);
+router.get('/meta/capabilities', metaController.getCapabilities);
 
 module.exports = router
