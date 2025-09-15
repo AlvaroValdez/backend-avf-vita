@@ -95,6 +95,8 @@ app.get('/api/health', (_req, res) => {
   res.status(200).json({ ok: true, ts: Date.now() });
 });
 
+app.use('/api', require('./routes/api'));  
+
 // === Capabilities endpoint (antes del 404) ===
 app.get('/api/meta/capabilities', metaController.getCapabilities); // <= AÑADIR
 
