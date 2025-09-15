@@ -1,26 +1,119 @@
+// routes/api.js
 const express = require('express');
 const router = express.Router();
-const prices = require('../controllers/pricesController');
-const countries = require('../controllers/countriesController');
-const rules = require('../controllers/rulesController');
-const wallets = require('../controllers/walletsController');
-const tx = require('../controllers/transactionsController');
-const vitaUsers = require('../controllers/vitaUsersController');
-const metaController = require('../controllers/metaController');
 
+console.log('[api-router] loaded v2025-09-15-CL', __filename);
 
-router.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
-router.get('/prices', prices.getPrices);
-router.get('/countries', countries.getCountries);
-router.get('/withdrawal-rules', rules.getWithdrawalRules);
-router.get('/wallets', wallets.listWallets);
-router.get('/transactions', tx.listTransactions);
-router.get('/ipn/events', ipnController.listEvents);
+const vitaService = require('../services/vitaService');
+const verifyVitaSignature = require('../middleware/verifyVitaSignature');
 
-// NUEVAS (creación real en Vita):
-router.post('/transactions/vita-sent', tx.createVitaSent);
-router.post('/transactions/withdrawal', tx.createWithdrawal);
-router.get('/vita-users', vitaUsers.getByEmail);
-router.get('/meta/capabilities', metaController.getCapabilities);
+// Carga opcional del modelo (si existe). No rompe si falta.
+let VitaEvent = null;
+try {
+  VitaEvent = require('../models/VitaEvent');
+} catch (_) {}
 
-module.exports = router
+// Helper async
+const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+/* ========= Health ========= */
+router.get('/health', (req, res) => {
+  res.json({ ok: true, ts: Date.now() });
+});
+
+/* ======= Vita: Lecturas ======= */
+router.get('/prices', ah(async (req, res) => {
+  const data = await vitaService.getPrices();
+  res.json(data);
+}));
+
+router.get('/countries', ah(async (req, res) => {
+  const data = await vitaService.getAvailableCountries();
+  res.json(data);
+}));
+
+router.get('/withdrawal-rules', ah(async (req, res) => {
+  const { country } = req.query;
+  const data = await vitaService.getWithdrawalRules(country);
+  res.json(data);
+}));
+
+router.get('/wallets', ah(async (req, res) => {
+  const page = Math.max(1, parseInt(req.query.page || '1', 10));
+  const count = Math.max(1, parseInt(req.query.count || '10', 10));
+  const data = await vitaService.getWallets(page, count);
+  res.json(data);
+}));
+
+router.get('/transactions', ah(async (req, res) => {
+  const page = Math.max(1, parseInt(req.query.page || '1', 10));
+  const count = Math.max(1, parseInt(req.query.count || '10', 10));
+  const data = await vitaService.getTransactions(page, count);
+  res.json(data);
+}));
+
+/* ===== Vita: Creación ===== */
+router.post('/transactions/vita-sent', ah(async (req, res) => {
+  const data = await vitaService.createVitaSent({ ...req.body });
+  res.json(data);
+}));
+
+router.post('/transactions/withdrawal', ah(async (req, res) => {
+  const data = await vitaService.createWithdrawal({ ...req.body });
+  res.json(data);
+}));
+
+/* ========= IPN ========= */
+// Webhook entrante (verifica firma y persiste evento si hay modelo)
+router.post('/ipn/vita', verifyVitaSignature, ah(async (req, res) => {
+  if (VitaEvent) {
+    await VitaEvent.create({
+      headers: req.headers,
+      payload: req.body,
+      txId: req.body?.transaction_id || req.body?.id || null,
+      order: req.body?.order || null,
+      status: req.body?.status || null,
+      receivedAt: new Date()
+    });
+  }
+  res.json({ ok: true });
+}));
+
+// Listado de eventos IPN (handler inline, sin ipnController)
+router.get('/ipn/events', ah(async (req, res) => {
+  if (!VitaEvent) {
+    return res.status(501).json({ message: 'Modelo VitaEvent no disponible.' });
+  }
+  const page = Math.max(1, parseInt(req.query.page || '1', 10));
+  const count = Math.max(1, Math.min(100, parseInt(req.query.count || '20', 10)));
+  const skip = (page - 1) * count;
+
+  const [items, total] = await Promise.all([
+    VitaEvent.find().sort({ createdAt: -1 }).skip(skip).limit(count).lean(),
+    VitaEvent.countDocuments()
+  ]);
+  res.json({ items, total, count, page });
+}));
+
+/* ======= Meta: capacidades ======= */
+router.get('/meta/capabilities', (req, res) => {
+  res.json({
+    auth: {
+      scheme: 'Bearer',
+      login:    process.env.AUTH_LOGIN_PATH    || null,
+      register: process.env.AUTH_REGISTER_PATH || null,
+      me:       process.env.AUTH_ME_PATH       || null
+    },
+    vita: {
+      prices: '/api/prices',
+      countries: '/api/countries',
+      withdrawal_rules: '/api/withdrawal-rules',
+      wallets: '/api/wallets',
+      transactions: '/api/transactions',
+      ipn_notify: '/api/ipn/vita'
+    },
+    server: { env: process.env.NODE_ENV || 'development', ts: Date.now() }
+  });
+});
+
+module.exports = router;

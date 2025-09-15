@@ -7,6 +7,7 @@ const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
 const connectDB = require('./config/db');
+const metaController = require('./controllers/metaController'); // <= AÑADIR (ruta relativa correcta)
 
 // Cargamos config/env pero hacemos fallback si no define app.*
 const configRaw = (() => {
@@ -93,6 +94,11 @@ app.get('/api/health', (_req, res) => {
   console.log('✅ /api/health check');
   res.status(200).json({ ok: true, ts: Date.now() });
 });
+
+app.use('/api', require('./routes/api'));  
+
+// === Capabilities endpoint (antes del 404) ===
+app.get('/api/meta/capabilities', metaController.getCapabilities); // <= AÑADIR
 
 // 404
 app.use((req, res) => res.status(404).json({ message: 'Endpoint no encontrado' }));
