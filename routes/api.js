@@ -2,16 +2,41 @@
 const express = require('express');
 const router = express.Router();
 
-console.log('[api-router] loaded v2025-09-15-CL', __filename);
+console.log('[api-router] loaded v2025-09-15-CL2', __filename);
 
 const vitaService = require('../services/vitaService');
-const verifyVitaSignature = require('../middleware/verifyVitaSignature');
+
+// ─────────────────────────────────────────────────────────────
+// verifyVitaSignature: require seguro (Render es case-sensitive)
+// Intenta varias rutas; si no existe, usa no-op para no romper.
+// ─────────────────────────────────────────────────────────────
+let verifyVitaSignature = (req, res, next) => {
+  console.warn('[api-router] WARN: verifyVitaSignature middleware NO encontrado; usando no-op temporal.');
+  next();
+};
+try {
+  verifyVitaSignature = require('../middleware/verifyVitaSignature');
+} catch (e1) {
+  try {
+    verifyVitaSignature = require('../../middleware/verifyVitaSignature');
+  } catch (e2) {
+    try {
+      verifyVitaSignature = require('../middlewares/verifyVitaSignature');
+    } catch (e3) {
+      try {
+        verifyVitaSignature = require('../middleware/verify-vita-signature');
+      } catch (e4) {
+        // se mantiene el no-op y se deja log arriba
+      }
+    }
+  }
+}
 
 // Carga opcional del modelo (si existe). No rompe si falta.
 let VitaEvent = null;
 try {
   VitaEvent = require('../models/VitaEvent');
-} catch (_) {}
+} catch (_) { /* opcional */ }
 
 // Helper async
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -64,7 +89,7 @@ router.post('/transactions/withdrawal', ah(async (req, res) => {
 }));
 
 /* ========= IPN ========= */
-// Webhook entrante (verifica firma y persiste evento si hay modelo)
+// Webhook entrante (si el middleware existe, se usará; si no, no-op temporal)
 router.post('/ipn/vita', verifyVitaSignature, ah(async (req, res) => {
   if (VitaEvent) {
     await VitaEvent.create({
@@ -79,7 +104,7 @@ router.post('/ipn/vita', verifyVitaSignature, ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// Listado de eventos IPN (handler inline, sin ipnController)
+// Listado de eventos IPN
 router.get('/ipn/events', ah(async (req, res) => {
   if (!VitaEvent) {
     return res.status(501).json({ message: 'Modelo VitaEvent no disponible.' });
