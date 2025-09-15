@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+
 const prices = require('../controllers/pricesController');
 const countries = require('../controllers/countriesController');
 const rules = require('../controllers/rulesController');
@@ -8,9 +9,7 @@ const tx = require('../controllers/transactionsController');
 const vitaUsers = require('../controllers/vitaUsersController');
 const ipnController = require('../controllers/ipnController');
 const metaController = require('../controllers/metaController');
-
-
-
+const verifyVitaSignature = require('../middleware/verifyVitaSignature'); 
 
 router.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
 router.get('/prices', prices.getPrices);
@@ -26,5 +25,7 @@ router.get('/meta/capabilities', metaController.getCapabilities);
 router.post('/transactions/vita-sent', tx.createVitaSent);
 router.post('/transactions/withdrawal', tx.createWithdrawal);
 router.get('/vita-users', vitaUsers.getByEmail);
+router.post('/ipn/vita', verifyVitaSignature, ipnController.handleVitaIPN);
+router.get('/meta/capabilities', metaController.getCapabilities);
 
 module.exports = router
