@@ -11,6 +11,14 @@ const VitaEvent = require('../models/VitaEvent');
 // Helper async
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
+// ⬇️ NUEVO helper: limita tiempo de espera de una promesa (no cancela la remota, pero evita colgar el endpoint)
+function withTimeout(promise, ms, label = 'op') {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`TIMEOUT:${label}:${ms}ms`)), ms))
+  ]);
+}
+
 /* ========= Health ========= */
 router.get('/health', (req, res) => {
   res.json({ ok: true, ts: Date.now() });
@@ -22,30 +30,40 @@ router.get('/prices', ah(async (_req, res) => {
   res.json(data);
 }));
 
-// /api/countries robusto: intenta vitaService.getAvailableCountries()
-// y si falla o viene vacío, deriva países desde /withdrawal-rules (CL)
-router.get('/countries', ah(async (_req, res) => {
-  // 1) Intento original (por si tu vitaService ya lo calcula desde /prices)
+router.get('/countries', ah(async (req, res) => {
+  // Permite pedir una versión "rápida" con timeouts más agresivos: /countries?fast=1
+  const fast = req.query.fast === '1';
+  const t1 = fast ? 1500 : 3000; // timeout getAvailableCountries
+  const t2 = fast ? 2000 : 4000; // timeout fallback withdrawal-rules
+
+  // 1) Intento original (si tu vitaService ya lo calcula desde /prices)
   try {
-    const data = await vitaService.getAvailableCountries();
-    if (Array.isArray(data) && data.length > 0) {
-      return res.json(data);
+    const list = await withTimeout(vitaService.getAvailableCountries(), t1, 'getAvailableCountries');
+    if (Array.isArray(list) && list.length > 0) {
+      return res.json(list);
     }
   } catch (e) {
-    console.warn('[GET /countries] getAvailableCountries() falló, usando fallback por rules:', e?.message || e);
+    console.warn('[GET /countries] getAvailableCountries falló/timeout:', e.message || e);
   }
 
-  // 2) Fallback estable: derivar ISO-2 desde las keys de rules
-  // Observación empírica de TU backend: /withdrawal-rules?country=CL trae rules de todos los países
-  const raw = await vitaService.getWithdrawalRules('CL'); // country dummy para forzar respuesta completa
-  const keys = Object.keys(raw?.rules || {});
-  const iso2 = [...new Set(
-    keys
-      .map(k => String(k).slice(0, 2).toUpperCase()) // prefijo de 2 letras
-      .filter(cc => /^[A-Z]{2}$/.test(cc))           // solo ISO-2
-  )].sort();
+  // 2) Fallback: derivar ISO-2 desde las keys de rules
+  try {
+    // Observación: tu backend devuelve todas las rules aunque pases country=CL
+    const raw = await withTimeout(vitaService.getWithdrawalRules('CL'), t2, 'getWithdrawalRulesFallback');
+    const keys = Object.keys(raw?.rules || {});
+    const iso2 = [...new Set(
+      keys
+        .map(k => String(k).slice(0, 2).toUpperCase())
+        .filter(cc => /^[A-Z]{2}$/.test(cc))
+    )].sort();
 
-  return res.json(iso2);
+    if (iso2.length > 0) return res.json(iso2);
+  } catch (e) {
+    console.warn('[GET /countries] fallback withdrawal-rules falló/timeout:', e.message || e);
+  }
+
+  // 3) Último recurso
+  return res.status(502).json({ message: 'No se pudo obtener países (timeout o error aguas arriba)' });
 }));
 
 
