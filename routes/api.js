@@ -22,10 +22,32 @@ router.get('/prices', ah(async (_req, res) => {
   res.json(data);
 }));
 
+// /api/countries robusto: intenta vitaService.getAvailableCountries()
+// y si falla o viene vacío, deriva países desde /withdrawal-rules (CL)
 router.get('/countries', ah(async (_req, res) => {
-  const data = await vitaService.getAvailableCountries();
-  res.json(data);
+  // 1) Intento original (por si tu vitaService ya lo calcula desde /prices)
+  try {
+    const data = await vitaService.getAvailableCountries();
+    if (Array.isArray(data) && data.length > 0) {
+      return res.json(data);
+    }
+  } catch (e) {
+    console.warn('[GET /countries] getAvailableCountries() falló, usando fallback por rules:', e?.message || e);
+  }
+
+  // 2) Fallback estable: derivar ISO-2 desde las keys de rules
+  // Observación empírica de TU backend: /withdrawal-rules?country=CL trae rules de todos los países
+  const raw = await vitaService.getWithdrawalRules('CL'); // country dummy para forzar respuesta completa
+  const keys = Object.keys(raw?.rules || {});
+  const iso2 = [...new Set(
+    keys
+      .map(k => String(k).slice(0, 2).toUpperCase()) // prefijo de 2 letras
+      .filter(cc => /^[A-Z]{2}$/.test(cc))           // solo ISO-2
+  )].sort();
+
+  return res.json(iso2);
 }));
+
 
 router.get('/withdrawal-rules', ah(async (req, res) => {
   const { country } = req.query;
