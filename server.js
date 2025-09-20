@@ -7,7 +7,8 @@ const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
 const connectDB = require('./config/db');
-const metaController = require('./controllers/metaController'); // <= AÑADIR (ruta relativa correcta)
+const metaController = require('./controllers/metaController'); 
+const authRoutes = require("./routes/auth");
 
 // Cargamos config/env pero hacemos fallback si no define app.*
 const configRaw = (() => {
@@ -82,7 +83,9 @@ app.use((req, res, next) => {
 
 // ===== Rutas =====
 app.use('/api', require('./routes/api'));
-app.use('/api/auth', require('./routes/auth')); // tu authControllerFinal ya implementado
+//app.use('/api/auth', require('./routes/auth')); // tu authControllerFinal ya implementado
+app.use("/api/auth", authRoutes);
+
 
 // === Health checks (antes del 404) ===
 app.get('/health', (_req, res) => {

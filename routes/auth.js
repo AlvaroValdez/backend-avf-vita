@@ -4,35 +4,18 @@
 const express = require('express');
 const router = express.Router();
 
-// ✅ Importa la función directamente (sin destructuring)
-const auth = require('../middleware/auth');
+// 🔧 Reemplaza si tienes esto:
+// const bcrypt = require('bcrypt');
+// por esto:
+const bcrypt = require('bcryptjs');
 
-// Controller real
+// Mantén tu middleware / controllers existentes tal cual
+const auth = require('../middleware/auth');
 const authController = require('../controllers/authControllerFinal');
 
-// Helper: si falta un handler, responde 501 en vez de crashear
-const safe = (name) => {
-  const fn = authController?.[name];
-  if (typeof fn === 'function') return fn;
-  console.warn(`⚠️  authController.${name} no implementado`);
-  return (req, res) => res.status(501).json({ message: `${name} no implementado` });
-};
+// Ejemplos de uso (si los tienes en este archivo):
+// const ok = await bcrypt.compare(password, user.password);
+// const passHash = await bcrypt.hash(password, 10);
 
-// Debug minimal
-try {
-  const keys = Object.keys(authController || {});
-  console.log('🔍 authController keys:', keys);
-} catch {}
-
-router.post('/register', safe('register'));
-router.post('/login', safe('login'));
-
-// Rutas protegidas (solo si el middleware existe)
-if (typeof auth === 'function') {
-  router.get('/profile', auth, safe('getProfile'));
-  router.post('/logout', auth, safe('logout'));
-} else {
-  console.warn('⚠️  middleware auth no es una función; omitiendo rutas protegidas');
-}
-
+// ...resto del archivo sin cambios
 module.exports = router;
